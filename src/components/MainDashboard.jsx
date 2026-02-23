@@ -114,7 +114,14 @@ const MainDashboard = () => {
     const RoomDetails = ({ room }) => {
         const [local, setLocal] = useState(room);
         return (
-            <div className="detail-panel">
+            <motion.div
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="detail-panel"
+            >
+                <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', margin: '0 auto 20px', display: 'none' }} className="mobile-handle" />
                 <button onClick={() => setSelectedRoom(null)} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={24} /></button>
                 <div style={{ marginBottom: '40px' }}>
                     <p style={{ color: '#00ffaa', fontSize: '10px', fontWeight: 'bold' }}>{room.type} UNIT</p>
@@ -156,7 +163,7 @@ const MainDashboard = () => {
                         <button className="action-btn btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Send size={14} /> 공지 발송</button>
                     </div>
                 </div>
-            </div>
+            </motion.div>
         );
     };
 
@@ -200,7 +207,9 @@ const MainDashboard = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Activity size={10} color="#00ffaa" /> DATABASE CONNECTED</div>
             </footer>
 
-            {selectedRoom && <RoomDetails room={selectedRoom} />}
+            <AnimatePresence>
+                {selectedRoom && <RoomDetails room={selectedRoom} />}
+            </AnimatePresence>
         </div>
     );
 };
