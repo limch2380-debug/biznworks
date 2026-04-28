@@ -62,7 +62,15 @@ const generateRooms = () => {
 };
 
 const MainDashboard = () => {
-    const [rooms, setRooms] = useState(generateRooms());
+    const [rooms, setRooms] = useState(() => {
+        const savedRooms = localStorage.getItem('officeRoomsData');
+        return savedRooms ? JSON.parse(savedRooms) : generateRooms();
+    });
+
+    useEffect(() => {
+        localStorage.setItem('officeRoomsData', JSON.stringify(rooms));
+    }, [rooms]);
+
     const [selectedRoom, setSelectedRoom] = useState(null);
     const [filter, setFilter] = useState('all');
 
