@@ -302,8 +302,20 @@ body {
   margin-top: 4px;
 }
 
+/* Utility Classes */
+.mobile-handle {
+  display: none;
+}
+
 /* Responsive Design (Mobile Web App UX) */
 @media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+
+  .mobile-handle {
+    display: block !important;
+  }
   .security-gate-card {
     width: 90%;
     padding: 40px 20px;

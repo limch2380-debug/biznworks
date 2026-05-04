@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    X, Shield, Key, Send, User, Phone, Calendar, CreditCard, LayoutDashboard, Activity
+    X, Key, Send, User, Phone, Calendar, CreditCard, LayoutDashboard, Activity,
+    Download, Upload, Save, CheckCircle
 } from 'lucide-react';
 
+// ===== 초기 기본 데이터 (최초 1회만 사용, 이후 저장된 데이터 우선) =====
 const initialDataMap = {
     "101": { company: "김고범 (1년/180만)", contact: "010-8719-3052", entryDate: "2024-12-04", paymentDate: "4일", occupied: true, note: "25.12.4일까지" },
     "102": { company: "1영 (1년/330만)", contact: "010-5722-0925", entryDate: "2025-04-23", paymentDate: "23일", occupied: true },
@@ -37,6 +39,8 @@ const initialDataMap = {
     "V4": { company: "비상주 양승우 (1년/33만)", contact: "010-8960-4869", entryDate: "2026-01-20", paymentDate: "20일", occupied: true }
 };
 
+const STORAGE_KEY = 'cubeMotion_officeData_v2';
+
 const generateRooms = () => {
     const rooms = [];
     const ranges = [
@@ -61,18 +65,72 @@ const generateRooms = () => {
     return rooms;
 };
 
+// ===== 안전한 localStorage 읽기/쓰기 =====
+const loadRooms = () => {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            // 데이터 유효성 검증: 배열이고 최소 1개 이상의 항목이 있어야 함
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id) {
+                console.log(`[CubeMotion] ✅ 저장된 데이터 ${parsed.length}개 로드 완료`);
+                return parsed;
+            }
+        }
+    } catch (e) {
+        console.error('[CubeMotion] ❌ 저장 데이터 읽기 실패:', e);
+    }
+    console.log('[CubeMotion] 📦 초기 데이터로 시작합니다.');
+    return generateRooms();
+};
+
+const saveRooms = (rooms) => {
+    try {
+        const json = JSON.stringify(rooms);
+        localStorage.setItem(STORAGE_KEY, json);
+        // 검증: 저장 직후 다시 읽어서 확인
+        const verify = localStorage.getItem(STORAGE_KEY);
+        if (verify === json) {
+            console.log(`[CubeMotion] 💾 데이터 저장 성공 (${rooms.length}개 호실)`);
+            return true;
+        } else {
+            console.error('[CubeMotion] ❌ 저장 검증 실패');
+            return false;
+        }
+    } catch (e) {
+        console.error('[CubeMotion] ❌ 데이터 저장 실패:', e);
+        return false;
+    }
+};
+
+// ===== 메인 대시보드 컴포넌트 =====
 const MainDashboard = () => {
-    const [rooms, setRooms] = useState(() => {
-        const savedRooms = localStorage.getItem('officeRoomsData');
-        return savedRooms ? JSON.parse(savedRooms) : generateRooms();
-    });
-
-    useEffect(() => {
-        localStorage.setItem('officeRoomsData', JSON.stringify(rooms));
-    }, [rooms]);
-
+    const [rooms, setRooms] = useState(loadRooms);
     const [selectedRoom, setSelectedRoom] = useState(null);
     const [filter, setFilter] = useState('all');
+    const [saveToast, setSaveToast] = useState(false);
+    const fileInputRef = useRef(null);
+
+    // rooms 변경 시 자동 저장
+    useEffect(() => {
+        saveRooms(rooms);
+    }, [rooms]);
+
+    // 다른 탭/창에서 변경된 localStorage 감지
+    useEffect(() => {
+        const handleStorageChange = (e) => {
+            if (e.key === STORAGE_KEY && e.newValue) {
+                try {
+                    const parsed = JSON.parse(e.newValue);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        setRooms(parsed);
+                    }
+                } catch (err) { /* 무시 */ }
+            }
+        };
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, []);
 
     const sections = [
         { title: "백단위 호실 (1층)", rooms: rooms.filter(r => r.id.startsWith('R') && parseInt(r.id.slice(1)) < 300) },
@@ -80,6 +138,43 @@ const MainDashboard = () => {
         { title: "이천단위 호실 (20층)", rooms: rooms.filter(r => r.id.startsWith('R') && parseInt(r.id.slice(1)) >= 2000) },
         { title: "비상주 센터", rooms: rooms.filter(r => r.id.startsWith('V')) }
     ];
+
+    // ===== 백업 다운로드 (JSON 파일로 내보내기) =====
+    const handleExportData = useCallback(() => {
+        const data = JSON.stringify(rooms, null, 2);
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+        a.href = url;
+        a.download = `CubeMotion_백업_${dateStr}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }, [rooms]);
+
+    // ===== 백업 복원 (JSON 파일 가져오기) =====
+    const handleImportData = useCallback((e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const parsed = JSON.parse(event.target.result);
+                if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id) {
+                    setRooms(parsed);
+                    setSaveToast(true);
+                    setTimeout(() => setSaveToast(false), 2500);
+                } else {
+                    alert('올바른 백업 파일이 아닙니다.');
+                }
+            } catch (err) {
+                alert('파일 읽기 오류: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = ''; // 같은 파일 재선택 허용
+    }, []);
 
     const renderRoom = (room) => {
         const isFiltered = filter === 'all' ? true : filter === 'occupied' ? room.occupied : !room.occupied;
@@ -92,7 +187,7 @@ const MainDashboard = () => {
                         <p className="room-name">{room.name}</p>
                         <p className="room-status" style={{ color: room.occupied ? '#ff3366' : '#00ffaa' }}>{room.occupied ? '입주 중' : '공실'}</p>
                     </div>
-                    {room.occupied && room.paymentDate && (
+                    {room.occupied && room.paymentDate && room.paymentDate !== '-' && (
                         <div style={{
                             background: 'rgba(0, 255, 170, 0.15)',
                             border: '1px solid rgba(0, 255, 170, 0.5)',
@@ -119,8 +214,18 @@ const MainDashboard = () => {
         );
     };
 
+    const handleSaveRoom = useCallback((local) => {
+        setRooms(prev => {
+            const updated = prev.map(r => r.id === local.id ? { ...local } : r);
+            return updated;
+        });
+        setSelectedRoom(null);
+        setSaveToast(true);
+        setTimeout(() => setSaveToast(false), 2500);
+    }, []);
+
     const RoomDetails = ({ room }) => {
-        const [local, setLocal] = useState(room);
+        const [local, setLocal] = useState({ ...room });
         return (
             <motion.div
                 initial={{ y: "100%" }}
@@ -129,7 +234,7 @@ const MainDashboard = () => {
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
                 className="detail-panel"
             >
-                <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', margin: '0 auto 20px', display: 'none' }} className="mobile-handle" />
+                <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px', margin: '0 auto 20px' }} className="mobile-handle" />
                 <button onClick={() => setSelectedRoom(null)} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={24} /></button>
                 <div style={{ marginBottom: '40px' }}>
                     <p style={{ color: '#00ffaa', fontSize: '10px', fontWeight: 'bold' }}>{room.type} UNIT</p>
@@ -159,10 +264,9 @@ const MainDashboard = () => {
                     <input value={local.note || ''} onChange={e => setLocal({ ...local, note: e.target.value })} placeholder="계약 기간 및 조건" />
                 </div>
 
-                <button className="action-btn btn-primary" style={{ marginTop: '20px' }} onClick={() => {
-                    setRooms(prev => prev.map(r => r.id === local.id ? local : r));
-                    setSelectedRoom(null);
-                }}>저장하기</button>
+                <button className="action-btn btn-primary" style={{ marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={() => handleSaveRoom(local)}>
+                    <Save size={16} /> 저장하기
+                </button>
 
                 <div style={{ marginTop: 'auto', paddingTop: '30px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                     <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#94a3b8', marginBottom: '15px' }}>스마트 오피스 제어</p>
@@ -178,20 +282,32 @@ const MainDashboard = () => {
     return (
         <div className="dashboard-layout">
             <header className="dashboard-header">
-                <div className="flex items-center" style={{ gap: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <div style={{ background: '#00ffaa', padding: '8px', borderRadius: '8px' }}><LayoutDashboard color="black" size={20} /></div>
-                    <h1 style={{ color: 'white', fontWeight: '900', fontSize: '20px', letterSpacing: '2px' }}>CUBE MOTION <span style={{ color: '#94a3b8', fontWeight: '300', fontSize: '14px' }}>REAL-TIME MONITORING</span></h1>
+                    <h1 style={{ color: 'white', fontWeight: '900', fontSize: '20px', letterSpacing: '2px' }}>CUBE MOTION <span style={{ color: '#94a3b8', fontWeight: '300', fontSize: '14px' }}>REAL-TIME</span></h1>
                 </div>
-                <div style={{ display: 'flex', background: 'rgba(255,255,255,0.03)', padding: '5px', borderRadius: '10px', gap: '5px' }}>
-                    {['all', 'occupied', 'vacant'].map(f => (
-                        <button
-                            key={f}
-                            onClick={() => setFilter(f)}
-                            style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', background: filter === f ? 'rgba(255,255,255,0.1)' : 'transparent', color: filter === f ? '#00ffaa' : '#94a3b8' }}
-                        >
-                            {f === 'all' ? '전체' : f === 'occupied' ? '입주' : '공실'}
-                        </button>
-                    ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* 백업/복원 버튼 */}
+                    <button onClick={handleExportData} title="데이터 백업 다운로드" style={{ background: 'rgba(0, 255, 170, 0.1)', border: '1px solid rgba(0, 255, 170, 0.3)', borderRadius: '8px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#00ffaa', fontSize: '11px', fontWeight: 'bold' }}>
+                        <Download size={14} /> <span className="hide-mobile">백업</span>
+                    </button>
+                    <button onClick={() => fileInputRef.current?.click()} title="백업 파일 복원" style={{ background: 'rgba(255, 170, 0, 0.1)', border: '1px solid rgba(255, 170, 0, 0.3)', borderRadius: '8px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#ffaa00', fontSize: '11px', fontWeight: 'bold' }}>
+                        <Upload size={14} /> <span className="hide-mobile">복원</span>
+                    </button>
+                    <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportData} style={{ display: 'none' }} />
+
+                    {/* 필터 버튼 */}
+                    <div style={{ display: 'flex', background: 'rgba(255,255,255,0.03)', padding: '5px', borderRadius: '10px', gap: '5px' }}>
+                        {['all', 'occupied', 'vacant'].map(f => (
+                            <button
+                                key={f}
+                                onClick={() => setFilter(f)}
+                                style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', background: filter === f ? 'rgba(255,255,255,0.1)' : 'transparent', color: filter === f ? '#00ffaa' : '#94a3b8' }}
+                            >
+                                {f === 'all' ? '전체' : f === 'occupied' ? '입주' : '공실'}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </header>
 
@@ -211,12 +327,35 @@ const MainDashboard = () => {
             </main>
 
             <footer className="dashboard-footer">
-                <div>CUBE MOTION OPERATIONS SYSTEM v2.5</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Activity size={10} color="#00ffaa" /> DATABASE CONNECTED</div>
+                <div>CUBE MOTION v3.0</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Activity size={10} color="#00ffaa" /> 입주 {rooms.filter(r => r.occupied).length} / 공실 {rooms.filter(r => !r.occupied).length}
+                </div>
             </footer>
 
             <AnimatePresence>
                 {selectedRoom && <RoomDetails room={selectedRoom} />}
+            </AnimatePresence>
+
+            {/* 저장 완료 토스트 알림 */}
+            <AnimatePresence>
+                {saveToast && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 50 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 50 }}
+                        style={{
+                            position: 'fixed', bottom: '100px', left: '50%', transform: 'translateX(-50%)',
+                            background: 'rgba(0, 255, 170, 0.15)', border: '1px solid rgba(0, 255, 170, 0.5)',
+                            backdropFilter: 'blur(20px)', padding: '12px 24px', borderRadius: '12px',
+                            color: '#00ffaa', fontSize: '14px', fontWeight: 'bold', zIndex: 999,
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            boxShadow: '0 0 30px rgba(0, 255, 170, 0.2)'
+                        }}
+                    >
+                        <CheckCircle size={18} /> 저장 완료!
+                    </motion.div>
+                )}
             </AnimatePresence>
         </div>
     );
