@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, Key, Send, User, Phone, Calendar, CreditCard, LayoutDashboard, Activity,
-    Download, Upload, Save, CheckCircle
+    Download, Upload, Save, CheckCircle, Plus, Minus, Trash2, AlertTriangle
 } from 'lucide-react';
 
 // ===== 초기 기본 데이터 (최초 1회만 사용, 이후 저장된 데이터 우선) =====
@@ -109,6 +109,8 @@ const MainDashboard = () => {
     const [selectedRoom, setSelectedRoom] = useState(null);
     const [filter, setFilter] = useState('all');
     const [saveToast, setSaveToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('저장 완료!');
+    const [deleteConfirm, setDeleteConfirm] = useState(null); // 삭제 확인용
     const fileInputRef = useRef(null);
 
     // rooms 변경 시 자동 저장
@@ -133,11 +135,75 @@ const MainDashboard = () => {
     }, []);
 
     const sections = [
-        { title: "백단위 호실 (1층)", rooms: rooms.filter(r => r.id.startsWith('R') && parseInt(r.id.slice(1)) < 300) },
-        { title: "천단위 호실 (2층)", rooms: rooms.filter(r => r.id.startsWith('R') && parseInt(r.id.slice(1)) >= 1000 && parseInt(r.id.slice(1)) < 2000) },
-        { title: "이천단위 호실 (20층)", rooms: rooms.filter(r => r.id.startsWith('R') && parseInt(r.id.slice(1)) >= 2000) },
-        { title: "비상주 센터", rooms: rooms.filter(r => r.id.startsWith('V')) }
+        { key: 'floor1', title: "백단위 호실 (1층)", rooms: rooms.filter(r => r.id.startsWith('R') && parseInt(r.id.slice(1)) < 300), rangeStart: 100, rangeEnd: 299, type: 'Office-A' },
+        { key: 'floor2', title: "천단위 호실 (2층)", rooms: rooms.filter(r => r.id.startsWith('R') && parseInt(r.id.slice(1)) >= 1000 && parseInt(r.id.slice(1)) < 2000), rangeStart: 1000, rangeEnd: 1999, type: 'Office-B' },
+        { key: 'floor20', title: "이천단위 호실 (20층)", rooms: rooms.filter(r => r.id.startsWith('R') && parseInt(r.id.slice(1)) >= 2000), rangeStart: 2000, rangeEnd: 2999, type: 'Office-C' },
+        { key: 'virtual', title: "비상주 센터", rooms: rooms.filter(r => r.id.startsWith('V')), rangeStart: 0, rangeEnd: 0, type: 'Virtual' }
     ];
+
+    // ===== 호실 추가 =====
+    const handleAddRoom = useCallback((section) => {
+        const sectionRooms = section.rooms;
+
+        if (section.key === 'virtual') {
+            // 비상주: V1, V2, ... 형태
+            const existingNums = sectionRooms.map(r => parseInt(r.id.replace('V', ''))).filter(n => !isNaN(n));
+            const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 1;
+            const newRoom = {
+                id: `V${nextNum}`, name: `비상주 ${nextNum}`, type: 'Virtual',
+                company: '', contact: '', entryDate: '', paymentDate: '', occupied: false, note: ''
+            };
+            setRooms(prev => [...prev, newRoom]);
+            setToastMessage(`비상주 ${nextNum} 추가 완료!`);
+        } else {
+            // 일반 호실: R101, R1001 등
+            const existingNums = sectionRooms.map(r => parseInt(r.id.replace('R', ''))).filter(n => !isNaN(n));
+            const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : section.rangeStart + 1;
+            // 범위 초과 체크
+            if (nextNum > section.rangeEnd) {
+                alert(`${section.title} 범위(${section.rangeStart}~${section.rangeEnd})를 초과했습니다.`);
+                return;
+            }
+            const newRoom = {
+                id: `R${nextNum}`, name: `${nextNum}호`, type: section.type,
+                company: '', contact: '', entryDate: '', paymentDate: '', occupied: false, note: ''
+            };
+            setRooms(prev => [...prev, newRoom]);
+            setToastMessage(`${nextNum}호 추가 완료!`);
+        }
+        setSaveToast(true);
+        setTimeout(() => setSaveToast(false), 2500);
+    }, []);
+
+    // ===== 호실 삭제 (마지막 호실) =====
+    const handleRemoveLastRoom = useCallback((section) => {
+        const sectionRooms = section.rooms;
+        if (sectionRooms.length === 0) return;
+
+        // 마지막 호실 가져오기
+        const lastRoom = sectionRooms[sectionRooms.length - 1];
+
+        // 입주 중인 호실 삭제 경고
+        if (lastRoom.occupied && lastRoom.company) {
+            const ok = window.confirm(`[${lastRoom.name}] ${lastRoom.company}\n\n입주 중인 호실입니다. 정말 삭제하시겠습니까?`);
+            if (!ok) return;
+        }
+
+        setRooms(prev => prev.filter(r => r.id !== lastRoom.id));
+        setToastMessage(`${lastRoom.name} 삭제 완료`);
+        setSaveToast(true);
+        setTimeout(() => setSaveToast(false), 2500);
+    }, []);
+
+    // ===== 특정 호실 삭제 (상세패널에서) =====
+    const handleDeleteRoom = useCallback((roomId) => {
+        setRooms(prev => prev.filter(r => r.id !== roomId));
+        setSelectedRoom(null);
+        setDeleteConfirm(null);
+        setToastMessage('호실 삭제 완료');
+        setSaveToast(true);
+        setTimeout(() => setSaveToast(false), 2500);
+    }, []);
 
     // ===== 백업 다운로드 (JSON 파일로 내보내기) =====
     const handleExportData = useCallback(() => {
@@ -275,6 +341,41 @@ const MainDashboard = () => {
                         <button className="action-btn btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Send size={14} /> 공지 발송</button>
                     </div>
                 </div>
+
+                {/* 호실 삭제 영역 */}
+                <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,51,102,0.15)' }}>
+                    {deleteConfirm === room.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ff3366', fontSize: '12px', fontWeight: 'bold' }}>
+                                <AlertTriangle size={14} /> 정말 이 호실을 삭제하시겠습니까?
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button
+                                    className="action-btn"
+                                    style={{ background: '#ff3366', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '13px' }}
+                                    onClick={() => handleDeleteRoom(room.id)}
+                                >
+                                    <Trash2 size={14} /> 삭제 확인
+                                </button>
+                                <button
+                                    className="action-btn btn-outline"
+                                    style={{ fontSize: '13px' }}
+                                    onClick={() => setDeleteConfirm(null)}
+                                >
+                                    취소
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button
+                            className="action-btn"
+                            style={{ background: 'rgba(255,51,102,0.08)', border: '1px solid rgba(255,51,102,0.3)', color: '#ff3366', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '12px' }}
+                            onClick={() => setDeleteConfirm(room.id)}
+                        >
+                            <Trash2 size={14} /> 이 호실 삭제
+                        </button>
+                    )}
+                </div>
             </motion.div>
         );
     };
@@ -315,9 +416,29 @@ const MainDashboard = () => {
                 <div className="custom-scrollbar">
                     <div className="room-grid">
                         {sections.map(section => (
-                            <React.Fragment key={section.title}>
+                            <React.Fragment key={section.key}>
                                 {section.rooms.some(r => filter === 'all' ? true : filter === 'occupied' ? r.occupied : !r.occupied) && (
-                                    <div className="room-section-header">{section.title}</div>
+                                    <div className="room-section-header">
+                                        <span>{section.title}</span>
+                                        <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>({section.rooms.length}실)</span>
+                                        <div className="section-controls">
+                                            <button
+                                                className="section-ctrl-btn add"
+                                                onClick={(e) => { e.stopPropagation(); handleAddRoom(section); }}
+                                                title="호실 추가"
+                                            >
+                                                <Plus size={14} />
+                                            </button>
+                                            <button
+                                                className="section-ctrl-btn remove"
+                                                onClick={(e) => { e.stopPropagation(); handleRemoveLastRoom(section); }}
+                                                title="마지막 호실 삭제"
+                                                disabled={section.rooms.length === 0}
+                                            >
+                                                <Minus size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
                                 )}
                                 {section.rooms.map(room => renderRoom(room))}
                             </React.Fragment>
@@ -353,7 +474,7 @@ const MainDashboard = () => {
                             boxShadow: '0 0 30px rgba(0, 255, 170, 0.2)'
                         }}
                     >
-                        <CheckCircle size={18} /> 저장 완료!
+                        <CheckCircle size={18} /> {toastMessage}
                     </motion.div>
                 )}
             </AnimatePresence>

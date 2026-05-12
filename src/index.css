@@ -233,6 +233,57 @@ body {
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent);
 }
 
+/* Section +/- Control Buttons */
+.section-controls {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.section-ctrl-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.section-ctrl-btn.add {
+  background: rgba(0, 255, 170, 0.12);
+  border: 1px solid rgba(0, 255, 170, 0.35);
+  color: #00ffaa;
+}
+
+.section-ctrl-btn.add:hover {
+  background: rgba(0, 255, 170, 0.25);
+  box-shadow: 0 0 15px rgba(0, 255, 170, 0.3);
+  transform: scale(1.1);
+}
+
+.section-ctrl-btn.remove {
+  background: rgba(255, 51, 102, 0.1);
+  border: 1px solid rgba(255, 51, 102, 0.3);
+  color: #ff3366;
+}
+
+.section-ctrl-btn.remove:hover {
+  background: rgba(255, 51, 102, 0.2);
+  box-shadow: 0 0 15px rgba(255, 51, 102, 0.3);
+  transform: scale(1.1);
+}
+
+.section-ctrl-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
 .room-grid {
   display: grid;
   grid-template-columns: repeat(10, 1fr);
