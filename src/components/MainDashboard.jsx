@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
-    X, Key, Send, User, Phone, Calendar, CreditCard, LayoutDashboard, Activity,
-    Download, Upload, Save, CheckCircle, Plus, Minus, Trash2, AlertTriangle
-} from 'lucide-react';
+    IconX, IconKey, IconSend, IconUser, IconPhone, IconCalendar, IconCreditCard,
+    IconDashboard, IconActivity, IconDownload, IconUpload, IconSave,
+    IconCheck, IconPlus, IconMinus, IconTrash, IconAlert
+} from './Icons';
 
-// ===== 초기 기본 데이터 (최초 1회만 사용, 이후 저장된 데이터 우선) =====
 const initialDataMap = {
     "101": { company: "김고범 (1년/180만)", contact: "010-8719-3052", entryDate: "2024-12-04", paymentDate: "4일", occupied: true, note: "25.12.4일까지" },
     "102": { company: "1영 (1년/330만)", contact: "010-5722-0925", entryDate: "2025-04-23", paymentDate: "23일", occupied: true },
@@ -49,38 +48,29 @@ const generateRooms = () => {
         { start: 1001, end: 1023, type: 'Office-B' },
         { start: 2001, end: 2005, type: 'Office-C' }
     ];
-
     ranges.forEach(range => {
         for (let i = range.start; i <= range.end; i++) {
             const data = initialDataMap[i.toString()] || { company: '', contact: '', entryDate: '', paymentDate: '', occupied: false, note: '' };
             rooms.push({ id: `R${i}`, name: `${i}호`, type: range.type, ...data });
         }
     });
-
     for (let i = 1; i <= 20; i++) {
         const data = initialDataMap[`V${i}`] || { company: '', contact: '', entryDate: '', paymentDate: '', occupied: false, note: '' };
         rooms.push({ id: `V${i}`, name: `비상주 ${i}`, type: 'Virtual', ...data });
     }
-
     return rooms;
 };
 
-// ===== 안전한 localStorage 읽기/쓰기 =====
 const loadRooms = () => {
     try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
             const parsed = JSON.parse(saved);
-            // 데이터 유효성 검증: 배열이고 최소 1개 이상의 항목이 있어야 함
             if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id) {
-                console.log(`[CubeMotion] ✅ 저장된 데이터 ${parsed.length}개 로드 완료`);
                 return parsed;
             }
         }
-    } catch (e) {
-        console.error('[CubeMotion] ❌ 저장 데이터 읽기 실패:', e);
-    }
-    console.log('[CubeMotion] 📦 초기 데이터로 시작합니다.');
+    } catch (e) { console.error('[CubeMotion] load error:', e); }
     return generateRooms();
 };
 
@@ -88,46 +78,28 @@ const saveRooms = (rooms) => {
     try {
         const json = JSON.stringify(rooms);
         localStorage.setItem(STORAGE_KEY, json);
-        // 검증: 저장 직후 다시 읽어서 확인
-        const verify = localStorage.getItem(STORAGE_KEY);
-        if (verify === json) {
-            console.log(`[CubeMotion] 💾 데이터 저장 성공 (${rooms.length}개 호실)`);
-            return true;
-        } else {
-            console.error('[CubeMotion] ❌ 저장 검증 실패');
-            return false;
-        }
-    } catch (e) {
-        console.error('[CubeMotion] ❌ 데이터 저장 실패:', e);
-        return false;
-    }
+        return localStorage.getItem(STORAGE_KEY) === json;
+    } catch (e) { return false; }
 };
 
-// ===== 메인 대시보드 컴포넌트 =====
 const MainDashboard = () => {
     const [rooms, setRooms] = useState(loadRooms);
     const [selectedRoom, setSelectedRoom] = useState(null);
     const [filter, setFilter] = useState('all');
     const [saveToast, setSaveToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('저장 완료!');
-    const [deleteConfirm, setDeleteConfirm] = useState(null); // 삭제 확인용
+    const [deleteConfirm, setDeleteConfirm] = useState(null);
     const fileInputRef = useRef(null);
 
-    // rooms 변경 시 자동 저장
-    useEffect(() => {
-        saveRooms(rooms);
-    }, [rooms]);
+    useEffect(() => { saveRooms(rooms); }, [rooms]);
 
-    // 다른 탭/창에서 변경된 localStorage 감지
     useEffect(() => {
         const handleStorageChange = (e) => {
             if (e.key === STORAGE_KEY && e.newValue) {
                 try {
                     const parsed = JSON.parse(e.newValue);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        setRooms(parsed);
-                    }
-                } catch (err) { /* 무시 */ }
+                    if (Array.isArray(parsed) && parsed.length > 0) setRooms(parsed);
+                } catch (err) { /* ignore */ }
             }
         };
         window.addEventListener('storage', handleStorageChange);
@@ -141,85 +113,54 @@ const MainDashboard = () => {
         { key: 'virtual', title: "비상주 센터", rooms: rooms.filter(r => r.id.startsWith('V')), rangeStart: 0, rangeEnd: 0, type: 'Virtual' }
     ];
 
-    // ===== 호실 추가 =====
+    const showToast = (msg) => {
+        setToastMessage(msg);
+        setSaveToast(true);
+        setTimeout(() => setSaveToast(false), 2500);
+    };
+
     const handleAddRoom = useCallback((section) => {
-        const sectionRooms = section.rooms;
-
         if (section.key === 'virtual') {
-            // 비상주: V1, V2, ... 형태
-            const existingNums = sectionRooms.map(r => parseInt(r.id.replace('V', ''))).filter(n => !isNaN(n));
-            const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 1;
-            const newRoom = {
-                id: `V${nextNum}`, name: `비상주 ${nextNum}`, type: 'Virtual',
-                company: '', contact: '', entryDate: '', paymentDate: '', occupied: false, note: ''
-            };
-            setRooms(prev => [...prev, newRoom]);
-            setToastMessage(`비상주 ${nextNum} 추가 완료!`);
+            const nums = section.rooms.map(r => parseInt(r.id.replace('V', ''))).filter(n => !isNaN(n));
+            const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+            setRooms(prev => [...prev, { id: `V${next}`, name: `비상주 ${next}`, type: 'Virtual', company: '', contact: '', entryDate: '', paymentDate: '', occupied: false, note: '' }]);
+            showToast(`비상주 ${next} 추가 완료!`);
         } else {
-            // 일반 호실: R101, R1001 등
-            const existingNums = sectionRooms.map(r => parseInt(r.id.replace('R', ''))).filter(n => !isNaN(n));
-            const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : section.rangeStart + 1;
-            // 범위 초과 체크
-            if (nextNum > section.rangeEnd) {
-                alert(`${section.title} 범위(${section.rangeStart}~${section.rangeEnd})를 초과했습니다.`);
-                return;
-            }
-            const newRoom = {
-                id: `R${nextNum}`, name: `${nextNum}호`, type: section.type,
-                company: '', contact: '', entryDate: '', paymentDate: '', occupied: false, note: ''
-            };
-            setRooms(prev => [...prev, newRoom]);
-            setToastMessage(`${nextNum}호 추가 완료!`);
+            const nums = section.rooms.map(r => parseInt(r.id.replace('R', ''))).filter(n => !isNaN(n));
+            const next = nums.length > 0 ? Math.max(...nums) + 1 : section.rangeStart + 1;
+            if (next > section.rangeEnd) { alert(`범위(${section.rangeStart}~${section.rangeEnd})를 초과했습니다.`); return; }
+            setRooms(prev => [...prev, { id: `R${next}`, name: `${next}호`, type: section.type, company: '', contact: '', entryDate: '', paymentDate: '', occupied: false, note: '' }]);
+            showToast(`${next}호 추가 완료!`);
         }
-        setSaveToast(true);
-        setTimeout(() => setSaveToast(false), 2500);
     }, []);
 
-    // ===== 호실 삭제 (마지막 호실) =====
     const handleRemoveLastRoom = useCallback((section) => {
-        const sectionRooms = section.rooms;
-        if (sectionRooms.length === 0) return;
-
-        // 마지막 호실 가져오기
-        const lastRoom = sectionRooms[sectionRooms.length - 1];
-
-        // 입주 중인 호실 삭제 경고
-        if (lastRoom.occupied && lastRoom.company) {
-            const ok = window.confirm(`[${lastRoom.name}] ${lastRoom.company}\n\n입주 중인 호실입니다. 정말 삭제하시겠습니까?`);
-            if (!ok) return;
+        if (section.rooms.length === 0) return;
+        const last = section.rooms[section.rooms.length - 1];
+        if (last.occupied && last.company) {
+            if (!window.confirm(`[${last.name}] ${last.company}\n\n입주 중인 호실입니다. 정말 삭제하시겠습니까?`)) return;
         }
-
-        setRooms(prev => prev.filter(r => r.id !== lastRoom.id));
-        setToastMessage(`${lastRoom.name} 삭제 완료`);
-        setSaveToast(true);
-        setTimeout(() => setSaveToast(false), 2500);
+        setRooms(prev => prev.filter(r => r.id !== last.id));
+        showToast(`${last.name} 삭제 완료`);
     }, []);
 
-    // ===== 특정 호실 삭제 (상세패널에서) =====
     const handleDeleteRoom = useCallback((roomId) => {
         setRooms(prev => prev.filter(r => r.id !== roomId));
         setSelectedRoom(null);
         setDeleteConfirm(null);
-        setToastMessage('호실 삭제 완료');
-        setSaveToast(true);
-        setTimeout(() => setSaveToast(false), 2500);
+        showToast('호실 삭제 완료');
     }, []);
 
-    // ===== 백업 다운로드 (JSON 파일로 내보내기) =====
     const handleExportData = useCallback(() => {
-        const data = JSON.stringify(rooms, null, 2);
-        const blob = new Blob([data], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
+        const blob = new Blob([JSON.stringify(rooms, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         const now = new Date();
-        const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
-        a.href = url;
-        a.download = `CubeMotion_백업_${dateStr}.json`;
+        a.href = URL.createObjectURL(blob);
+        a.download = `CubeMotion_백업_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.json`;
         a.click();
-        URL.revokeObjectURL(url);
+        URL.revokeObjectURL(a.href);
     }, [rooms]);
 
-    // ===== 백업 복원 (JSON 파일 가져오기) =====
     const handleImportData = useCallback((e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -229,23 +170,23 @@ const MainDashboard = () => {
                 const parsed = JSON.parse(event.target.result);
                 if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id) {
                     setRooms(parsed);
-                    setSaveToast(true);
-                    setTimeout(() => setSaveToast(false), 2500);
-                } else {
-                    alert('올바른 백업 파일이 아닙니다.');
-                }
-            } catch (err) {
-                alert('파일 읽기 오류: ' + err.message);
-            }
+                    showToast('복원 완료!');
+                } else { alert('올바른 백업 파일이 아닙니다.'); }
+            } catch (err) { alert('파일 읽기 오류: ' + err.message); }
         };
         reader.readAsText(file);
-        e.target.value = ''; // 같은 파일 재선택 허용
+        e.target.value = '';
+    }, []);
+
+    const handleSaveRoom = useCallback((local) => {
+        setRooms(prev => prev.map(r => r.id === local.id ? { ...local } : r));
+        setSelectedRoom(null);
+        showToast('저장 완료!');
     }, []);
 
     const renderRoom = (room) => {
         const isFiltered = filter === 'all' ? true : filter === 'occupied' ? room.occupied : !room.occupied;
         if (!isFiltered) return null;
-
         return (
             <div key={room.id} className={`room-card ${room.occupied ? 'occupied' : 'vacant'}`} onClick={() => setSelectedRoom(room)}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -254,16 +195,7 @@ const MainDashboard = () => {
                         <p className="room-status" style={{ color: room.occupied ? '#ff3366' : '#00ffaa' }}>{room.occupied ? '입주 중' : '공실'}</p>
                     </div>
                     {room.occupied && room.paymentDate && room.paymentDate !== '-' && (
-                        <div style={{
-                            background: 'rgba(0, 255, 170, 0.15)',
-                            border: '1px solid rgba(0, 255, 170, 0.5)',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            color: '#00ffaa',
-                            fontWeight: '900',
-                            boxShadow: '0 0 10px rgba(0, 255, 170, 0.2)'
-                        }}>
+                        <div style={{ background: 'rgba(0, 255, 170, 0.15)', border: '1px solid rgba(0, 255, 170, 0.5)', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', color: '#00ffaa', fontWeight: '900', boxShadow: '0 0 10px rgba(0, 255, 170, 0.2)' }}>
                             {room.paymentDate} 입금
                         </div>
                     )}
@@ -280,48 +212,31 @@ const MainDashboard = () => {
         );
     };
 
-    const handleSaveRoom = useCallback((local) => {
-        setRooms(prev => {
-            const updated = prev.map(r => r.id === local.id ? { ...local } : r);
-            return updated;
-        });
-        setSelectedRoom(null);
-        setSaveToast(true);
-        setTimeout(() => setSaveToast(false), 2500);
-    }, []);
-
     const RoomDetails = ({ room }) => {
         const [local, setLocal] = useState({ ...room });
         return (
-            <motion.div
-                initial={{ y: "100%" }}
-                animate={{ y: 0 }}
-                exit={{ y: "100%" }}
-                transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="detail-panel"
-            >
+            <div className="detail-panel slide-up">
                 <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px', margin: '0 auto 20px' }} className="mobile-handle" />
-                <button onClick={() => setSelectedRoom(null)} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={24} /></button>
+                <button onClick={() => setSelectedRoom(null)} style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><IconX size={24} /></button>
                 <div style={{ marginBottom: '40px' }}>
                     <p style={{ color: '#00ffaa', fontSize: '10px', fontWeight: 'bold' }}>{room.type} UNIT</p>
                     <h2 style={{ fontSize: '32px', color: 'white', fontWeight: '900' }}>{room.name}</h2>
                 </div>
-
                 <div className="input-group">
-                    <label><User size={10} /> 입주사 정보 / 비고</label>
+                    <label><IconUser size={10} /> 입주사 정보 / 비고</label>
                     <input value={local.company} onChange={e => setLocal({ ...local, company: e.target.value, occupied: !!e.target.value })} placeholder="비어있음" />
                 </div>
                 <div className="input-group">
-                    <label><Phone size={10} /> 연락처</label>
+                    <label><IconPhone size={10} /> 연락처</label>
                     <input value={local.contact} onChange={e => setLocal({ ...local, contact: e.target.value })} placeholder="010-0000-0000" />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                     <div className="input-group">
-                        <label><Calendar size={10} /> 입주일</label>
+                        <label><IconCalendar size={10} /> 입주일</label>
                         <input value={local.entryDate} onChange={e => setLocal({ ...local, entryDate: e.target.value })} placeholder="25.01.01" />
                     </div>
                     <div className="input-group">
-                        <label><CreditCard size={10} /> 결제일</label>
+                        <label><IconCreditCard size={10} /> 결제일</label>
                         <input value={local.paymentDate} onChange={e => setLocal({ ...local, paymentDate: e.target.value })} placeholder="매월 25일" />
                     </div>
                 </div>
@@ -329,54 +244,36 @@ const MainDashboard = () => {
                     <label>특이사항</label>
                     <input value={local.note || ''} onChange={e => setLocal({ ...local, note: e.target.value })} placeholder="계약 기간 및 조건" />
                 </div>
-
                 <button className="action-btn btn-primary" style={{ marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={() => handleSaveRoom(local)}>
-                    <Save size={16} /> 저장하기
+                    <IconSave size={16} /> 저장하기
                 </button>
-
                 <div style={{ marginTop: 'auto', paddingTop: '30px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                     <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#94a3b8', marginBottom: '15px' }}>스마트 오피스 제어</p>
                     <div style={{ display: 'flex', gap: '10px' }}>
-                        <button className="action-btn btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Key size={14} /> 도어락</button>
-                        <button className="action-btn btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Send size={14} /> 공지 발송</button>
+                        <button className="action-btn btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><IconKey size={14} /> 도어락</button>
+                        <button className="action-btn btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><IconSend size={14} /> 공지 발송</button>
                     </div>
                 </div>
-
-                {/* 호실 삭제 영역 */}
                 <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,51,102,0.15)' }}>
                     {deleteConfirm === room.id ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ff3366', fontSize: '12px', fontWeight: 'bold' }}>
-                                <AlertTriangle size={14} /> 정말 이 호실을 삭제하시겠습니까?
+                                <IconAlert size={14} /> 정말 이 호실을 삭제하시겠습니까?
                             </div>
                             <div style={{ display: 'flex', gap: '10px' }}>
-                                <button
-                                    className="action-btn"
-                                    style={{ background: '#ff3366', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '13px' }}
-                                    onClick={() => handleDeleteRoom(room.id)}
-                                >
-                                    <Trash2 size={14} /> 삭제 확인
+                                <button className="action-btn" style={{ background: '#ff3366', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '13px' }} onClick={() => handleDeleteRoom(room.id)}>
+                                    <IconTrash size={14} /> 삭제 확인
                                 </button>
-                                <button
-                                    className="action-btn btn-outline"
-                                    style={{ fontSize: '13px' }}
-                                    onClick={() => setDeleteConfirm(null)}
-                                >
-                                    취소
-                                </button>
+                                <button className="action-btn btn-outline" style={{ fontSize: '13px' }} onClick={() => setDeleteConfirm(null)}>취소</button>
                             </div>
                         </div>
                     ) : (
-                        <button
-                            className="action-btn"
-                            style={{ background: 'rgba(255,51,102,0.08)', border: '1px solid rgba(255,51,102,0.3)', color: '#ff3366', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '12px' }}
-                            onClick={() => setDeleteConfirm(room.id)}
-                        >
-                            <Trash2 size={14} /> 이 호실 삭제
+                        <button className="action-btn" style={{ background: 'rgba(255,51,102,0.08)', border: '1px solid rgba(255,51,102,0.3)', color: '#ff3366', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '12px' }} onClick={() => setDeleteConfirm(room.id)}>
+                            <IconTrash size={14} /> 이 호실 삭제
                         </button>
                     )}
                 </div>
-            </motion.div>
+            </div>
         );
     };
 
@@ -384,27 +281,20 @@ const MainDashboard = () => {
         <div className="dashboard-layout">
             <header className="dashboard-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <div style={{ background: '#00ffaa', padding: '8px', borderRadius: '8px' }}><LayoutDashboard color="black" size={20} /></div>
+                    <div style={{ background: '#00ffaa', padding: '8px', borderRadius: '8px' }}><IconDashboard color="black" size={20} /></div>
                     <h1 style={{ color: 'white', fontWeight: '900', fontSize: '20px', letterSpacing: '2px' }}>CUBE MOTION <span style={{ color: '#94a3b8', fontWeight: '300', fontSize: '14px' }}>REAL-TIME</span></h1>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    {/* 백업/복원 버튼 */}
                     <button onClick={handleExportData} title="데이터 백업 다운로드" style={{ background: 'rgba(0, 255, 170, 0.1)', border: '1px solid rgba(0, 255, 170, 0.3)', borderRadius: '8px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#00ffaa', fontSize: '11px', fontWeight: 'bold' }}>
-                        <Download size={14} /> <span className="hide-mobile">백업</span>
+                        <IconDownload size={14} /> <span className="hide-mobile">백업</span>
                     </button>
                     <button onClick={() => fileInputRef.current?.click()} title="백업 파일 복원" style={{ background: 'rgba(255, 170, 0, 0.1)', border: '1px solid rgba(255, 170, 0, 0.3)', borderRadius: '8px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#ffaa00', fontSize: '11px', fontWeight: 'bold' }}>
-                        <Upload size={14} /> <span className="hide-mobile">복원</span>
+                        <IconUpload size={14} /> <span className="hide-mobile">복원</span>
                     </button>
                     <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportData} style={{ display: 'none' }} />
-
-                    {/* 필터 버튼 */}
                     <div style={{ display: 'flex', background: 'rgba(255,255,255,0.03)', padding: '5px', borderRadius: '10px', gap: '5px' }}>
                         {['all', 'occupied', 'vacant'].map(f => (
-                            <button
-                                key={f}
-                                onClick={() => setFilter(f)}
-                                style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', background: filter === f ? 'rgba(255,255,255,0.1)' : 'transparent', color: filter === f ? '#00ffaa' : '#94a3b8' }}
-                            >
+                            <button key={f} onClick={() => setFilter(f)} style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', background: filter === f ? 'rgba(255,255,255,0.1)' : 'transparent', color: filter === f ? '#00ffaa' : '#94a3b8' }}>
                                 {f === 'all' ? '전체' : f === 'occupied' ? '입주' : '공실'}
                             </button>
                         ))}
@@ -422,20 +312,11 @@ const MainDashboard = () => {
                                         <span>{section.title}</span>
                                         <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>({section.rooms.length}실)</span>
                                         <div className="section-controls">
-                                            <button
-                                                className="section-ctrl-btn add"
-                                                onClick={(e) => { e.stopPropagation(); handleAddRoom(section); }}
-                                                title="호실 추가"
-                                            >
-                                                <Plus size={14} />
+                                            <button className="section-ctrl-btn add" onClick={(e) => { e.stopPropagation(); handleAddRoom(section); }} title="호실 추가">
+                                                <IconPlus size={14} />
                                             </button>
-                                            <button
-                                                className="section-ctrl-btn remove"
-                                                onClick={(e) => { e.stopPropagation(); handleRemoveLastRoom(section); }}
-                                                title="마지막 호실 삭제"
-                                                disabled={section.rooms.length === 0}
-                                            >
-                                                <Minus size={14} />
+                                            <button className="section-ctrl-btn remove" onClick={(e) => { e.stopPropagation(); handleRemoveLastRoom(section); }} title="마지막 호실 삭제" disabled={section.rooms.length === 0}>
+                                                <IconMinus size={14} />
                                             </button>
                                         </div>
                                     </div>
@@ -450,34 +331,17 @@ const MainDashboard = () => {
             <footer className="dashboard-footer">
                 <div>CUBE MOTION v3.0</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Activity size={10} color="#00ffaa" /> 입주 {rooms.filter(r => r.occupied).length} / 공실 {rooms.filter(r => !r.occupied).length}
+                    <IconActivity size={10} color="#00ffaa" /> 입주 {rooms.filter(r => r.occupied).length} / 공실 {rooms.filter(r => !r.occupied).length}
                 </div>
             </footer>
 
-            <AnimatePresence>
-                {selectedRoom && <RoomDetails room={selectedRoom} />}
-            </AnimatePresence>
+            {selectedRoom && <RoomDetails room={selectedRoom} />}
 
-            {/* 저장 완료 토스트 알림 */}
-            <AnimatePresence>
-                {saveToast && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 50 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 50 }}
-                        style={{
-                            position: 'fixed', bottom: '100px', left: '50%', transform: 'translateX(-50%)',
-                            background: 'rgba(0, 255, 170, 0.15)', border: '1px solid rgba(0, 255, 170, 0.5)',
-                            backdropFilter: 'blur(20px)', padding: '12px 24px', borderRadius: '12px',
-                            color: '#00ffaa', fontSize: '14px', fontWeight: 'bold', zIndex: 999,
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            boxShadow: '0 0 30px rgba(0, 255, 170, 0.2)'
-                        }}
-                    >
-                        <CheckCircle size={18} /> {toastMessage}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {saveToast && (
+                <div className="toast-notification fade-in-up">
+                    <IconCheck size={18} /> {toastMessage}
+                </div>
+            )}
         </div>
     );
 };

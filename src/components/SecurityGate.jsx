@@ -1,16 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, ShieldCheck } from 'lucide-react';
+import { IconLock, IconShield } from './Icons';
 
 const SecurityGate = ({ onAuthenticated }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
+  const [visible, setVisible] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
     const focusInput = () => inputRef.current?.focus();
     focusInput();
     window.addEventListener('click', focusInput);
+    // 진입 애니메이션
+    requestAnimationFrame(() => setVisible(true));
     return () => window.removeEventListener('click', focusInput);
   }, []);
 
@@ -73,15 +75,17 @@ const SecurityGate = ({ onAuthenticated }) => {
         />
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
+      <div
         className="z-10 flex flex-col items-center"
+        style={{
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'scale(1)' : 'scale(0.9)',
+          transition: 'opacity 0.6s ease, transform 0.6s ease'
+        }}
       >
         <div className="text-center" style={{ marginBottom: '60px' }}>
-          <motion.div
-            animate={{ rotateY: [0, 180, 360] }}
-            transition={{ repeat: Infinity, duration: 10, ease: "linear" }}
+          <div
+            className="shield-spin"
             style={{
               width: '100px', height: '100px',
               background: 'rgba(0,255,170,0.1)',
@@ -91,8 +95,8 @@ const SecurityGate = ({ onAuthenticated }) => {
               margin: '0 auto 30px'
             }}
           >
-            <ShieldCheck size={48} color="#00ffaa" />
-          </motion.div>
+            <IconShield size={48} color="#00ffaa" />
+          </div>
           <h1 style={{ fontSize: '3rem', fontWeight: '900', letterSpacing: '0.4em', color: 'white', textTransform: 'uppercase' }}>Cube Motion</h1>
           <p style={{ color: '#94a3b8', letterSpacing: '0.5em', fontSize: '11px', marginTop: '15px', opacity: 0.6 }}>SYSTEM SECURITY PROTOCOL</p>
         </div>
@@ -132,25 +136,21 @@ const SecurityGate = ({ onAuthenticated }) => {
             </button>
           </div>
 
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                style={{ position: 'absolute', bottom: '25px', color: '#ff3366', fontSize: '10px', fontWeight: 'bold', tracking: '2px' }}
-              >
-                ACCESS DENIED - RETRY
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {error && (
+            <div
+              className="fade-in"
+              style={{ position: 'absolute', bottom: '25px', color: '#ff3366', fontSize: '10px', fontWeight: 'bold', letterSpacing: '2px' }}
+            >
+              ACCESS DENIED - RETRY
+            </div>
+          )}
         </div>
 
         <div style={{ marginTop: '50px', opacity: 0.3, display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Lock size={12} color="#94a3b8" />
+          <IconLock size={12} color="#94a3b8" />
           <span style={{ fontSize: '9px', letterSpacing: '4px', color: '#94a3b8' }}>KEYBOARD ENTRY ACTIVE</span>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
